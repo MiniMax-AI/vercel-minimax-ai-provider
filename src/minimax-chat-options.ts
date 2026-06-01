@@ -1,7 +1,13 @@
 import { z, ZodType } from 'zod/v4';
 
 // https://platform.minimax.io/docs/guides/text-generation
-export type MinimaxChatModelId = 'MiniMax-M2' | 'MiniMax-M2-Stable' | (string & {});
+export type MinimaxChatModelId =
+  | 'MiniMax-M3'
+  | 'MiniMax-M2.7'
+  | 'MiniMax-M2.7-highspeed'
+  | 'MiniMax-M2'
+  | 'MiniMax-M2-Stable'
+  | (string & {});
 
 
 export const minimaxChatProviderOptions = z.object({

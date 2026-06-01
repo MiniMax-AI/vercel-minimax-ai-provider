@@ -4,10 +4,16 @@ The **[MiniMax AI Provider](https://ai-sdk.dev/providers/community-providers/min
 
 ## Available Models
 
+- **MiniMax-M3**: Flagship model — 512K context, native multimodal (text + image), advanced reasoning
+- **MiniMax-M2.7**: Enhanced reasoning and coding for low-cost, high-throughput use
+- **MiniMax-M2.7-highspeed**: High-speed variant of M2.7 for low-latency scenarios
 - **MiniMax-M2**: Agentic capabilities, Advanced reasoning
 - **MiniMax-M2-Stable**: High concurrency and commercial use
 
-Both models share the same API interface and usage patterns.
+All models are accessed through the same provider interface, but their
+capabilities and pricing differ (for example, only M3 accepts image input).
+See the [MiniMax pricing docs](https://platform.minimax.io/docs/guides/pricing-paygo)
+for per-model details.
 
 ## Setup
 
