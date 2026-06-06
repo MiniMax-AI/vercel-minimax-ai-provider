@@ -25,3 +25,17 @@ export type {
 
 // Common exports
 export type { MinimaxErrorData } from './minimax-chat-options';
+
+// Multimodal model id + provider option types (native MiniMax /v1 endpoints)
+export type {
+  MinimaxImageModelId,
+  MinimaxImageProviderOptions,
+} from './minimax-image-options';
+export type {
+  MinimaxSpeechModelId,
+  MinimaxSpeechProviderOptions,
+} from './minimax-speech-options';
+export type {
+  MinimaxVideoModelId,
+  MinimaxVideoProviderOptions,
+} from './minimax-video-options';

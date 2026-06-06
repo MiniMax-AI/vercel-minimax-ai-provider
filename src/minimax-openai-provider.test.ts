@@ -62,10 +62,64 @@ describe('minimax provider', () => {
     });
   });
 
+  describe('multimodal models', () => {
+    it('creates image, speech, and video models on the OpenAI-compatible instance', () => {
+      expect(minimaxOpenAI.image('image-01').provider).toBe('minimax.image');
+      expect(minimaxOpenAI.imageModel('image-01').provider).toBe(
+        'minimax.image',
+      );
+      expect(minimaxOpenAI.speech('speech-2.6-hd').provider).toBe(
+        'minimax.speech',
+      );
+      expect(minimaxOpenAI.speechModel('speech-2.6-hd').provider).toBe(
+        'minimax.speech',
+      );
+      expect(minimaxOpenAI.video('MiniMax-Hailuo-2.3').provider).toBe(
+        'minimax.video',
+      );
+      expect(minimaxOpenAI.videoModel('MiniMax-Hailuo-2.3').provider).toBe(
+        'minimax.video',
+      );
+    });
+
+    it('routes media to the configured /v1 base with a Bearer header', async () => {
+      let capturedUrl = '';
+      let capturedAuth: string | null = null;
+      const custom = createMinimax({
+        apiKey: 'k',
+        baseURL: 'https://api.minimax.io/v1',
+        fetch: (async (url: string, init: RequestInit) => {
+          capturedUrl = String(url);
+          capturedAuth = new Headers(init.headers).get('authorization');
+          return new Response(
+            JSON.stringify({
+              data: { image_base64: ['AA'] },
+              base_resp: { status_code: 0 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }) as unknown as typeof fetch,
+      });
+
+      await custom.image('image-01').doGenerate({
+        prompt: 'x',
+        n: 1,
+        size: undefined,
+        aspectRatio: undefined,
+        seed: undefined,
+        files: undefined,
+        mask: undefined,
+        providerOptions: {},
+      });
+
+      expect(capturedUrl).toBe('https://api.minimax.io/v1/image_generation');
+      expect(capturedAuth).toBe('Bearer k');
+    });
+  });
+
   describe('unsupported model types', () => {
-    it('should throw NoSuchModelError for unsupported model types', () => {
+    it('should throw NoSuchModelError for embeddings', () => {
       expect(() => minimax.embeddingModel('test')).toThrow(/embeddingModel/);
-      expect(() => minimax.imageModel('test')).toThrow(/imageModel/);
     });
   });
 

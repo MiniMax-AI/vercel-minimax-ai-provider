@@ -139,6 +139,11 @@ export function convertToMinimaxChatMessages(
 
       case 'tool': {
         for (const toolResponse of content) {
+          // Tool approval responses are not sent to the chat API.
+          if (toolResponse.type === 'tool-approval-response') {
+            continue;
+          }
+
           const output = toolResponse.output;
 
           let contentValue: string;

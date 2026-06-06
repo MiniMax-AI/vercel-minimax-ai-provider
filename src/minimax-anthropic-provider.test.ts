@@ -64,10 +64,66 @@ describe('minimaxAnthropic provider', () => {
     });
   });
 
+  describe('multimodal models', () => {
+    it('creates image, speech, and video models on the native surface', () => {
+      expect(minimaxAnthropic.image('image-01').provider).toBe('minimax.image');
+      expect(minimaxAnthropic.imageModel('image-01').provider).toBe(
+        'minimax.image',
+      );
+      expect(minimaxAnthropic.speech('speech-2.6-hd').provider).toBe(
+        'minimax.speech',
+      );
+      expect(minimaxAnthropic.speechModel('speech-2.6-hd').provider).toBe(
+        'minimax.speech',
+      );
+      expect(minimaxAnthropic.video('MiniMax-Hailuo-2.3').provider).toBe(
+        'minimax.video',
+      );
+      expect(minimaxAnthropic.videoModel('MiniMax-Hailuo-2.3').provider).toBe(
+        'minimax.video',
+      );
+    });
+
+    it('routes media to the /v1 base (not /anthropic/v1) with a Bearer header', async () => {
+      let capturedUrl = '';
+      let capturedAuth: string | null = null;
+      const custom = createMinimaxAnthropic({
+        apiKey: 'k',
+        baseURL: 'https://api.minimax.io/anthropic/v1',
+        fetch: (async (url: string, init: RequestInit) => {
+          capturedUrl = String(url);
+          capturedAuth = new Headers(init.headers).get('authorization');
+          return new Response(
+            JSON.stringify({
+              data: { image_base64: ['AA'] },
+              base_resp: { status_code: 0 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }) as unknown as typeof fetch,
+      });
+
+      await custom.image('image-01').doGenerate({
+        prompt: 'x',
+        n: 1,
+        size: undefined,
+        aspectRatio: undefined,
+        seed: undefined,
+        files: undefined,
+        mask: undefined,
+        providerOptions: {},
+      });
+
+      expect(capturedUrl).toBe('https://api.minimax.io/v1/image_generation');
+      expect(capturedAuth).toBe('Bearer k');
+    });
+  });
+
   describe('unsupported model types', () => {
-    it('should throw NoSuchModelError for unsupported model types', () => {
-      expect(() => minimaxAnthropic.embeddingModel('test')).toThrow(/embeddingModel/);
-      expect(() => minimaxAnthropic.imageModel('test')).toThrow(/imageModel/);
+    it('should throw NoSuchModelError for embeddings', () => {
+      expect(() => minimaxAnthropic.embeddingModel('test')).toThrow(
+        /embeddingModel/,
+      );
     });
   });
 

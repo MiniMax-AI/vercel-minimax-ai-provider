@@ -19,8 +19,8 @@
     "prettier-check": "prettier --check \"./**/*.ts*\"",
     "prepare": "husky",
     "test": "pnpm test:node && pnpm test:edge",
-    "test:edge": "vitest --config vitest.edge.config.js --run",
-    "test:node": "vitest --config vitest.node.config.js --run",
+    "test:edge": "vitest --config vitest.edge.config.mjs --run",
+    "test:node": "vitest --config vitest.node.config.mjs --run",
     "ci:release": "pnpm clean && pnpm build && changeset publish",
     "ci:version": "changeset version && pnpm install --no-frozen-lockfile"
   },
@@ -33,9 +33,9 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "3.0.0-beta.71",
-    "@ai-sdk/provider": "3.0.0-beta.23",
-    "@ai-sdk/provider-utils": "4.0.0-beta.41"
+    "@ai-sdk/anthropic": "^3.0.81",
+    "@ai-sdk/provider": "^3.0.10",
+    "@ai-sdk/provider-utils": "^4.0.27"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.12",

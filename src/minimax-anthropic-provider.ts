@@ -1,8 +1,11 @@
 import { AnthropicMessagesLanguageModel } from '@ai-sdk/anthropic/internal';
 import {
+  Experimental_VideoModelV3,
+  ImageModelV3,
   LanguageModelV3,
   NoSuchModelError,
   ProviderV3,
+  SpeechModelV3,
 } from '@ai-sdk/provider';
 import {
   FetchFunction,
@@ -12,6 +15,11 @@ import {
   withUserAgentSuffix,
 } from '@ai-sdk/provider-utils';
 import { MinimaxChatModelId } from './minimax-chat-options';
+import { createMinimaxMediaModels } from './minimax-media';
+import { MinimaxImageModelId } from './minimax-image-options';
+import { MinimaxSpeechModelId } from './minimax-speech-options';
+import { MinimaxVideoModelId } from './minimax-video-options';
+import { deriveV1BaseURL, createBearerHeaders } from './minimax-shared';
 
 export interface MinimaxAnthropicProviderSettings {
   /**
@@ -49,6 +57,24 @@ Creates a MiniMax model for text generation using Anthropic-compatible API.
 Creates a MiniMax chat model for text generation using Anthropic-compatible API.
 */
   chat(modelId: MinimaxChatModelId): LanguageModelV3;
+
+  /**
+Creates a MiniMax image model (native MiniMax `/v1` endpoint).
+*/
+  image(modelId: MinimaxImageModelId): ImageModelV3;
+  imageModel(modelId: MinimaxImageModelId): ImageModelV3;
+
+  /**
+Creates a MiniMax speech (text-to-speech) model (native MiniMax `/v1` endpoint).
+*/
+  speech(modelId: MinimaxSpeechModelId): SpeechModelV3;
+  speechModel(modelId: MinimaxSpeechModelId): SpeechModelV3;
+
+  /**
+Creates a MiniMax video model (native MiniMax `/v1` endpoint, async polling).
+*/
+  video(modelId: MinimaxVideoModelId): Experimental_VideoModelV3;
+  videoModel(modelId: MinimaxVideoModelId): Experimental_VideoModelV3;
 }
 
 export function createMinimaxAnthropic(
@@ -85,6 +111,16 @@ export function createMinimaxAnthropic(
     });
   };
 
+  // MiniMax's image/speech/video are native `/v1` endpoints (not part of the
+  // Anthropic-compatible surface) and authenticate with a Bearer token rather
+  // than the `x-api-key` header used for chat. Derive the `/v1` base from the
+  // anthropic base and build a Bearer header for these media models.
+  const mediaModels = createMinimaxMediaModels({
+    baseURL: deriveV1BaseURL(baseURL),
+    headers: createBearerHeaders(options),
+    fetch: options.fetch,
+  });
+
   const provider = (modelId: MinimaxChatModelId) =>
     createLanguageModel(modelId);
 
@@ -92,11 +128,15 @@ export function createMinimaxAnthropic(
   provider.chat = createLanguageModel;
   provider.specificationVersion = 'v3' as const;
 
+  provider.image = mediaModels.image;
+  provider.imageModel = mediaModels.image;
+  provider.speech = mediaModels.speech;
+  provider.speechModel = mediaModels.speech;
+  provider.video = mediaModels.video;
+  provider.videoModel = mediaModels.video;
+
   provider.embeddingModel = (modelId: string) => {
     throw new NoSuchModelError({ modelId, modelType: 'embeddingModel' });
-  };
-  provider.imageModel = (modelId: string) => {
-    throw new NoSuchModelError({ modelId, modelType: 'imageModel' });
   };
 
   return provider;
