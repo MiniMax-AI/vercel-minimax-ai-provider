@@ -4,6 +4,7 @@
   "license": "Apache-2.0",
   "author": "MiniMax",
   "description": "Vercel AI Provider for running MiniMax AI models",
+  "packageManager": "pnpm@9.15.9",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
