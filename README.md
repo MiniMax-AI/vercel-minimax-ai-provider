@@ -22,17 +22,28 @@ See [Image, Speech & Video](#image-speech--video) below for usage.
 ## Setup
 
 ```bash
-npm i ai vercel-minimax-ai-provider
+npm i ai @minimax-ai/ai-sdk-provider
 ```
 
 Set your API key in the `MINIMAX_API_KEY` environment variable, or pass it as `apiKey` when creating a provider instance.
 
+### Migrating from the unscoped package
+
+New releases are published under the official `@minimax-ai` scope. To migrate from `vercel-minimax-ai-provider`:
+
+```bash
+npm uninstall vercel-minimax-ai-provider
+npm install @minimax-ai/ai-sdk-provider
+```
+
+Update your imports to use `@minimax-ai/ai-sdk-provider`. The scoped package has its own version history; its initial release includes the current provider implementation, including updates beyond the unscoped `0.0.2` release. Check compatibility with your application's AI SDK version before upgrading.
+
 ## Provider Instance
 
-You can import the default provider instance `minimax` from `vercel-minimax-ai-provider`:
+You can import the default provider instance `minimax` from `@minimax-ai/ai-sdk-provider`:
 
 ```ts
-import { minimax } from 'vercel-minimax-ai-provider';
+import { minimax } from '@minimax-ai/ai-sdk-provider';
 ```
 
 > **Note**: The default `minimax` instance uses the Anthropic-compatible API format, which provides better support for advanced features. If you need the OpenAI-compatible format, use `minimaxOpenAI` instead.
@@ -42,7 +53,7 @@ import { minimax } from 'vercel-minimax-ai-provider';
 The default instances call the international endpoint (`https://api.minimax.io`). API keys are region-specific, so if your account is on the China platform ([platform.minimax.cn](https://platform.minimax.cn)), create an instance with the China base URL. Otherwise requests fail with `401 invalid api key`.
 
 ```ts
-import { createMinimax, createMinimaxOpenAI } from 'vercel-minimax-ai-provider';
+import { createMinimax, createMinimaxOpenAI } from '@minimax-ai/ai-sdk-provider';
 
 // Anthropic-compatible format
 const minimax = createMinimax({
@@ -60,7 +71,7 @@ The base URL must include `/v1`; the provider appends the endpoint path (for exa
 ## Example
 
 ```ts
-import { minimax } from 'vercel-minimax-ai-provider';
+import { minimax } from '@minimax-ai/ai-sdk-provider';
 import { generateText } from 'ai';
 
 const { text, reasoningText } = await generateText({
@@ -75,7 +86,7 @@ console.log(text);
 ## Streaming
 
 ```ts
-import { minimax } from 'vercel-minimax-ai-provider';
+import { minimax } from '@minimax-ai/ai-sdk-provider';
 import { streamText } from 'ai';
 
 const result = streamText({
@@ -99,7 +110,7 @@ MiniMax provides two API compatibility modes, both included in this package:
 ### Anthropic-Compatible API (Default)
 
 ```ts
-import { minimax } from 'vercel-minimax-ai-provider';
+import { minimax } from '@minimax-ai/ai-sdk-provider';
 import { generateText } from 'ai';
 
 const { text } = await generateText({
@@ -111,7 +122,7 @@ const { text } = await generateText({
 Or explicitly:
 
 ```ts
-import { minimaxAnthropic } from 'vercel-minimax-ai-provider';
+import { minimaxAnthropic } from '@minimax-ai/ai-sdk-provider';
 import { generateText } from 'ai';
 
 const { text } = await generateText({
@@ -123,7 +134,7 @@ const { text } = await generateText({
 ### OpenAI-Compatible API
 
 ```ts
-import { minimaxOpenAI } from 'vercel-minimax-ai-provider';
+import { minimaxOpenAI } from '@minimax-ai/ai-sdk-provider';
 import { generateText } from 'ai';
 
 const { text, reasoningText } = await generateText({
@@ -145,7 +156,7 @@ the default `minimax`, but `minimaxOpenAI.image(...)` etc. work the same.
 ### Image generation
 
 ```ts
-import { minimax } from 'vercel-minimax-ai-provider';
+import { minimax } from '@minimax-ai/ai-sdk-provider';
 import { generateImage } from 'ai';
 
 const { images } = await generateImage({
@@ -192,7 +203,7 @@ await generateImage({
 ### Speech (text-to-speech)
 
 ```ts
-import { minimax } from 'vercel-minimax-ai-provider';
+import { minimax } from '@minimax-ai/ai-sdk-provider';
 import { generateSpeech } from 'ai';
 
 const { audio } = await generateSpeech({
@@ -213,7 +224,7 @@ const { audio } = await generateSpeech({
 ### Video generation
 
 ```ts
-import { minimax } from 'vercel-minimax-ai-provider';
+import { minimax } from '@minimax-ai/ai-sdk-provider';
 import { experimental_generateVideo as generateVideo } from 'ai';
 
 const { videos } = await generateVideo({
