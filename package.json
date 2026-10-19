@@ -1,5 +1,5 @@
 {
-  "name": "vercel-minimax-ai-provider",
+  "name": "@minimax-ai/ai-sdk-provider",
   "version": "0.0.1",
   "license": "Apache-2.0",
   "author": "MiniMax",
