@@ -261,24 +261,27 @@ export class MinimaxChatLanguageModel implements LanguageModelV3 {
       content.push({ type: 'text', text });
     }
 
-    // reasoning content - extract from reasoning_details
-    if (choice.message.reasoning_details?.length) {
-      const reasoningBlock = choice.message.reasoning_details.find(
-        (block: any) => block.type === 'reasoning.text'
-      );
-
-      if (reasoningBlock?.text) {
-        content.push({
-          type: 'reasoning',
-          text: reasoningBlock.text,
-          // Store original reasoning_details in providerMetadata for round-trip
-          providerMetadata: {
-            minimax: {
-              reasoningDetails: choice.message.reasoning_details,
-            },
+    // reasoning content. Models that return reasoning_details (e.g. MiniMax-M3)
+    // also return the same text in reasoning_content, so reasoning_details wins
+    // to avoid duplication; models that only return reasoning_content
+    // (e.g. MiniMax-M3.1-Flash) fall back to it.
+    const reasoningText = findReasoningText(choice.message.reasoning_details);
+    if (reasoningText) {
+      content.push({
+        type: 'reasoning',
+        text: reasoningText,
+        // Store original reasoning_details in providerMetadata for round-trip
+        providerMetadata: {
+          minimax: {
+            reasoningDetails: choice.message.reasoning_details,
           },
-        });
-      }
+        },
+      });
+    } else if (choice.message.reasoning_content) {
+      content.push({
+        type: 'reasoning',
+        text: choice.message.reasoning_content,
+      });
     }
 
     // tool calls
@@ -416,6 +419,21 @@ export class MinimaxChatLanguageModel implements LanguageModelV3 {
     let isActiveText = false;
     let accumulatedReasoningDetails: any[] = []; // Accumulate reasoning_details for round-trip
 
+    const emitReasoningDelta = (
+      controller: TransformStreamDefaultController<LanguageModelV3StreamPart>,
+      text: string,
+    ) => {
+      if (!isActiveReasoning) {
+        controller.enqueue({ type: 'reasoning-start', id: 'reasoning-0' });
+        isActiveReasoning = true;
+      }
+      controller.enqueue({
+        type: 'reasoning-delta',
+        id: 'reasoning-0',
+        delta: text,
+      });
+    };
+
     return {
       stream: response.pipeThrough(
         new TransformStream<
@@ -525,25 +543,13 @@ export class MinimaxChatLanguageModel implements LanguageModelV3 {
                 }
               }
 
-              const reasoningBlock = delta.reasoning_details.find(
-                (block: any) => block.type === 'reasoning.text'
-              );
-
-              if (reasoningBlock?.text) {
-                if (!isActiveReasoning) {
-                  controller.enqueue({
-                    type: 'reasoning-start',
-                    id: 'reasoning-0',
-                  });
-                  isActiveReasoning = true;
-                }
-
-                controller.enqueue({
-                  type: 'reasoning-delta',
-                  id: 'reasoning-0',
-                  delta: reasoningBlock.text,
-                });
+              const reasoningText = findReasoningText(delta.reasoning_details);
+              if (reasoningText) {
+                emitReasoningDelta(controller, reasoningText);
               }
+            } else if (delta.reasoning_content) {
+              // Models that only stream reasoning_content (e.g. MiniMax-M3.1-Flash)
+              emitReasoningDelta(controller, delta.reasoning_content);
             }
 
             if (delta.content) {
@@ -777,6 +783,7 @@ const MinimaxChatResponseSchema = z.object({
         role: z.literal('assistant').nullish(),
         content: z.string().nullish(),
         reasoning_details: z.array(z.any()).nullish(), // MiniMax specific
+        reasoning_content: z.string().nullish(), // MiniMax specific
         tool_calls: z
           .array(
             z.object({
@@ -813,6 +820,7 @@ const createOpenAICompatibleChatChunkSchema = <
               role: z.enum(['assistant']).nullish(),
               content: z.string().nullish(),
               reasoning_details: z.array(z.any()).nullish(), // MiniMax specific
+              reasoning_content: z.string().nullish(), // MiniMax specific
               tool_calls: z
                 .array(
                   z.object({
@@ -835,3 +843,22 @@ const createOpenAICompatibleChatChunkSchema = <
     errorSchema,
   ]);
 
+// Returns the text of the first `reasoning.text` block in MiniMax reasoning_details.
+function findReasoningText(
+  details: unknown[] | null | undefined,
+): string | undefined {
+  for (const block of details ?? []) {
+    if (
+      block != null &&
+      typeof block === 'object' &&
+      'type' in block &&
+      block.type === 'reasoning.text' &&
+      'text' in block &&
+      typeof block.text === 'string' &&
+      block.text.length > 0
+    ) {
+      return block.text;
+    }
+  }
+  return undefined;
+}

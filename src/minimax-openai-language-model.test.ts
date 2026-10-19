@@ -168,3 +168,208 @@ describe('convertToMinimaxChatMessages tool-message migration', () => {
     ]);
   });
 });
+
+async function readStream(
+  stream: ReadableStream<unknown>,
+): Promise<Array<{ type: string; delta?: string }>> {
+  const parts: Array<{ type: string; delta?: string }> = [];
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value as { type: string; delta?: string });
+  }
+  return parts;
+}
+
+function sseResponse(chunks: unknown[]) {
+  return new Response(
+    chunks.map(c => `data: ${JSON.stringify(c)}\n\n`).join('') +
+      'data: [DONE]\n\n',
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+}
+
+const userPrompt = [
+  {
+    role: 'user' as const,
+    content: [{ type: 'text' as const, text: 'hello' }],
+  },
+];
+
+describe('MinimaxChatLanguageModel reasoning', () => {
+  it('returns reasoning from reasoning_content when reasoning_details is absent', async () => {
+    const model = makeModel(async () =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'answer',
+              reasoning_content: 'thinking',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+    );
+
+    const { content } = await model.doGenerate({ prompt: userPrompt });
+
+    expect(content.filter(c => c.type === 'reasoning')).toEqual([
+      { type: 'reasoning', text: 'thinking' },
+    ]);
+  });
+
+  it('uses reasoning_details only once when both reasoning fields are present', async () => {
+    const details = [{ type: 'reasoning.text', id: 'r1', text: 'thinking' }];
+    const model = makeModel(async () =>
+      jsonResponse({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'answer',
+              reasoning_content: 'thinking',
+              reasoning_details: details,
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+    );
+
+    const { content } = await model.doGenerate({ prompt: userPrompt });
+
+    expect(content.filter(c => c.type === 'reasoning')).toEqual([
+      {
+        type: 'reasoning',
+        text: 'thinking',
+        providerMetadata: { minimax: { reasoningDetails: details } },
+      },
+    ]);
+  });
+
+  it('streams reasoning_content deltas as reasoning parts', async () => {
+    const model = makeModel(async () =>
+      sseResponse([
+        {
+          choices: [
+            { delta: { role: 'assistant', reasoning_content: 'thin' } },
+          ],
+        },
+        { choices: [{ delta: { reasoning_content: 'king' } }] },
+        { choices: [{ delta: { content: 'answer' } }] },
+        { choices: [{ delta: {}, finish_reason: 'stop' }] },
+      ]),
+    );
+
+    const { stream } = await model.doStream({
+      prompt: userPrompt,
+      includeRawChunks: false,
+    });
+    const parts = await readStream(stream);
+
+    expect(
+      parts
+        .filter(p => p.type.startsWith('reasoning'))
+        .map(p => [p.type, p.delta]),
+    ).toEqual([
+      ['reasoning-start', undefined],
+      ['reasoning-delta', 'thin'],
+      ['reasoning-delta', 'king'],
+      ['reasoning-end', undefined],
+    ]);
+  });
+
+  it('does not duplicate streamed reasoning when both reasoning fields are present', async () => {
+    const model = makeModel(async () =>
+      sseResponse([
+        {
+          choices: [
+            {
+              delta: {
+                reasoning_content: 'thinking',
+                reasoning_details: [
+                  { type: 'reasoning.text', id: 'r1', text: 'thinking' },
+                ],
+              },
+            },
+          ],
+        },
+        { choices: [{ delta: { content: 'answer' } }] },
+        { choices: [{ delta: {}, finish_reason: 'stop' }] },
+      ]),
+    );
+
+    const { stream } = await model.doStream({
+      prompt: userPrompt,
+      includeRawChunks: false,
+    });
+    const parts = await readStream(stream);
+
+    expect(
+      parts.filter(p => p.type === 'reasoning-delta').map(p => p.delta),
+    ).toEqual(['thinking']);
+  });
+});
+
+describe('convertToMinimaxChatMessages reasoning', () => {
+  it('sends assistant reasoning text back as reasoning_content', () => {
+    const messages = convertToMinimaxChatMessages([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'thinking' },
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            input: { city: 'Beijing' },
+          },
+        ],
+      },
+    ]);
+
+    expect(messages).toEqual([
+      {
+        role: 'assistant',
+        content: '',
+        reasoning_content: 'thinking',
+        tool_calls: [
+          {
+            id: 'call-1',
+            type: 'function',
+            function: { name: 'getWeather', arguments: '{"city":"Beijing"}' },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps reasoning_details from provider metadata alongside reasoning_content', () => {
+    const details = [{ type: 'reasoning.text', id: 'r1', text: 'thinking' }];
+    const messages = convertToMinimaxChatMessages([
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'thinking',
+            providerOptions: { minimax: { reasoningDetails: details } },
+          },
+          { type: 'text', text: 'answer' },
+        ],
+      },
+    ]);
+
+    expect(messages).toEqual([
+      {
+        role: 'assistant',
+        content: 'answer',
+        reasoning_content: 'thinking',
+        reasoning_details: details,
+      },
+    ]);
+  });
+});

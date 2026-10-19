@@ -88,6 +88,7 @@ export function convertToMinimaxChatMessages(
           function: { name: string; arguments: string };
         }> = [];
         let reasoningDetails: any = undefined;
+        let reasoningContent = '';
 
         for (const part of content) {
           const partMetadata = getOpenAIMetadata(part);
@@ -111,6 +112,7 @@ export function convertToMinimaxChatMessages(
               break;
             }
             case 'reasoning': {
+              reasoningContent += part.text;
               // Extract original reasoning_details from providerOptions if available
               if (partMinimaxMetadata?.reasoningDetails) {
                 reasoningDetails = partMinimaxMetadata.reasoningDetails;
@@ -127,7 +129,13 @@ export function convertToMinimaxChatMessages(
           ...metadata,
         };
 
-        // Add reasoning_details if available (MiniMax specific)
+        // Pass thinking back for interleaved thinking. The API reads
+        // reasoning_details first and falls back to reasoning_content, so
+        // models that only return reasoning_content (e.g. MiniMax-M3.1-Flash)
+        // keep their thinking across turns.
+        if (reasoningContent) {
+          messageObj.reasoning_content = reasoningContent;
+        }
         if (reasoningDetails) {
           messageObj.reasoning_details = reasoningDetails;
         }
