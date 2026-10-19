@@ -6,10 +6,10 @@ The **[MiniMax AI Provider](https://ai-sdk.dev/providers/community-providers/min
 
 ### Language
 
-- **MiniMax-M2**: Agentic capabilities, Advanced reasoning
-- **MiniMax-M2-Stable**: High concurrency and commercial use
+- **MiniMax-M3.1-Flash**: Frontier multimodal coding model with a 1M context window and tunable thinking depth
+- **MiniMax-M3**: Frontier multimodal coding model with a 1M context window
 
-Both models share the same API interface and usage patterns.
+Any other model ID supported by the MiniMax API can also be passed as a string.
 
 ### Image, Speech & Video
 
@@ -22,8 +22,10 @@ See [Image, Speech & Video](#image-speech--video) below for usage.
 ## Setup
 
 ```bash
-npm i vercel-minimax-ai-provider
+npm i ai vercel-minimax-ai-provider
 ```
+
+Set your API key in the `MINIMAX_API_KEY` environment variable, or pass it as `apiKey` when creating a provider instance.
 
 ## Provider Instance
 
@@ -35,16 +37,59 @@ import { minimax } from 'vercel-minimax-ai-provider';
 
 > **Note**: The default `minimax` instance uses the Anthropic-compatible API format, which provides better support for advanced features. If you need the OpenAI-compatible format, use `minimaxOpenAI` instead.
 
+### Region and base URL
+
+The default instances call the international endpoint (`https://api.minimax.io`). API keys are region-specific, so if your account is on the China platform ([platform.minimax.cn](https://platform.minimax.cn)), create an instance with the China base URL. Otherwise requests fail with `401 invalid api key`.
+
+```ts
+import { createMinimax, createMinimaxOpenAI } from 'vercel-minimax-ai-provider';
+
+// Anthropic-compatible format
+const minimax = createMinimax({
+  baseURL: 'https://api.minimax.cn/anthropic/v1',
+});
+
+// OpenAI-compatible format
+const minimaxOpenAI = createMinimaxOpenAI({
+  baseURL: 'https://api.minimax.cn/v1',
+});
+```
+
+The base URL must include `/v1`; the provider appends the endpoint path (for example `/messages` or `/chat/completions`) to it.
+
 ## Example
 
 ```ts
 import { minimax } from 'vercel-minimax-ai-provider';
 import { generateText } from 'ai';
 
-const { text } = await generateText({
-  model: minimax('MiniMax-M2'),
+const { text, reasoningText } = await generateText({
+  model: minimax('MiniMax-M3.1-Flash'),
   prompt: 'Write a JavaScript function that sorts a list:',
 });
+
+console.log(reasoningText); // the model's thinking, when it thinks
+console.log(text);
+```
+
+## Streaming
+
+```ts
+import { minimax } from 'vercel-minimax-ai-provider';
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: minimax('MiniMax-M3.1-Flash'),
+  prompt: 'Write a JavaScript function that sorts a list:',
+});
+
+for await (const part of result.fullStream) {
+  if (part.type === 'reasoning-delta' || part.type === 'text-delta') {
+    process.stdout.write(part.text);
+  }
+}
+
+console.log(await result.usage);
 ```
 
 ## API Compatibility
@@ -58,7 +103,7 @@ import { minimax } from 'vercel-minimax-ai-provider';
 import { generateText } from 'ai';
 
 const { text } = await generateText({
-  model: minimax('MiniMax-M2'),
+  model: minimax('MiniMax-M3.1-Flash'),
   prompt: 'Write a JavaScript function that sorts a list:',
 });
 ```
@@ -70,7 +115,7 @@ import { minimaxAnthropic } from 'vercel-minimax-ai-provider';
 import { generateText } from 'ai';
 
 const { text } = await generateText({
-  model: minimaxAnthropic('MiniMax-M2'),
+  model: minimaxAnthropic('MiniMax-M3.1-Flash'),
   prompt: 'Write a JavaScript function that sorts a list:',
 });
 ```
@@ -81,23 +126,13 @@ const { text } = await generateText({
 import { minimaxOpenAI } from 'vercel-minimax-ai-provider';
 import { generateText } from 'ai';
 
-const { text } = await generateText({
-  model: minimaxOpenAI('MiniMax-M2'),
+const { text, reasoningText } = await generateText({
+  model: minimaxOpenAI('MiniMax-M3.1-Flash'),
   prompt: 'Write a JavaScript function that sorts a list:',
 });
 ```
 
-### Using MiniMax-M2-Stable
-
-```ts
-import { minimax } from 'vercel-minimax-ai-provider';
-import { generateText } from 'ai';
-
-const { text } = await generateText({
-  model: minimax('MiniMax-M2-Stable'),
-  prompt: 'Write a JavaScript function that sorts a list:',
-});
-```
+Both modes return the model's thinking as reasoning content, report token usage (including cached and reasoning tokens) for both `generateText` and `streamText`, and pass the thinking back to the model when you reuse `result.response.messages` in multi-turn tool calls.
 
 ## Image, Speech & Video
 
@@ -111,7 +146,7 @@ the default `minimax`, but `minimaxOpenAI.image(...)` etc. work the same.
 
 ```ts
 import { minimax } from 'vercel-minimax-ai-provider';
-import { experimental_generateImage as generateImage } from 'ai';
+import { generateImage } from 'ai';
 
 const { images } = await generateImage({
   model: minimax.image('image-01'),
@@ -158,7 +193,7 @@ await generateImage({
 
 ```ts
 import { minimax } from 'vercel-minimax-ai-provider';
-import { experimental_generateSpeech as generateSpeech } from 'ai';
+import { generateSpeech } from 'ai';
 
 const { audio } = await generateSpeech({
   model: minimax.speech('speech-2.6-hd'),
@@ -173,7 +208,7 @@ const { audio } = await generateSpeech({
 
 > MiniMax returns the audio as a hex-encoded payload which this provider decodes
 > to bytes for you. Voice IDs come from MiniMax's voice catalogue — see the
-> [T2A docs](https://platform.minimaxi.com/docs/api-reference/speech-t2a-http).
+> [T2A docs](https://platform.minimax.io/docs/api-reference/speech-t2a-http).
 
 ### Video generation
 
@@ -200,16 +235,22 @@ const { videos } = await generateVideo({
 
 Video generation is asynchronous: the model creates a task, polls until it
 completes, and returns the final video URL. For image-to-video, pass an `image`
-(the first frame). Note that `MiniMax-Hailuo-2.3-Fast` is **image-to-video only**
-— it is not valid for text-to-video.
+via the structured `prompt` (the first frame). Note that `MiniMax-Hailuo-2.3-Fast`
+is **image-to-video only** — it is not valid for text-to-video.
 
 ```ts
 await generateVideo({
   model: minimax.video('MiniMax-Hailuo-2.3-Fast'),
-  prompt: 'Animate this photo with a gentle zoom',
-  image: 'https://example.com/first-frame.jpg',
+  prompt: {
+    text: 'Animate this photo with a gentle zoom',
+    image: 'https://example.com/first-frame.jpg', // URL string, base64, or Uint8Array
+  },
 });
 ```
+
+> MiniMax fetches image URLs and calls `callbackUrl` from its servers. Do not
+> forward untrusted end-user input into `providerOptions` (for example
+> `callbackUrl`) without validating it.
 
 ## Documentation
 

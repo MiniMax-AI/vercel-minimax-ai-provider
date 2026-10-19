@@ -89,6 +89,8 @@ export function createMinimax(
       url: ({ path }) => `${baseURL}${path}`,
       headers: getHeaders,
       fetch: options.fetch,
+      // The API only reports usage in a stream when include_usage is requested.
+      includeUsage: true,
     });
   };
 

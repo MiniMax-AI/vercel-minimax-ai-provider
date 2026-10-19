@@ -43,6 +43,7 @@ export interface MinimaxAssistantMessage
   role: 'assistant';
   content?: string | null;
   tool_calls?: Array<MinimaxMessageToolCall>;
+  reasoning_content?: string;
 }
 
 export interface MinimaxMessageToolCall extends JsonRecord {
