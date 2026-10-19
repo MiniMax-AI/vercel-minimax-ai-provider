@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MinimaxChatLanguageModel } from './minimax-openai-language-model';
 import { convertToMinimaxChatMessages } from './convert-to-minimax-chat-messages';
+import { createMinimax as createMinimaxOpenAI } from './minimax-openai-provider';
 
 // Regression tests for the @ai-sdk/provider beta -> stable migration:
 // - LanguageModelV3Usage is now nested ({ inputTokens: {...}, outputTokens: {...} })
@@ -51,14 +52,21 @@ describe('MinimaxChatLanguageModel usage/finishReason migration', () => {
 
     expect(result.usage.inputTokens).toEqual({
       total: 10,
-      noCache: undefined,
+      noCache: 6,
       cacheRead: 4,
       cacheWrite: undefined,
     });
     expect(result.usage.outputTokens).toEqual({
       total: 5,
-      text: undefined,
+      text: 3,
       reasoning: 2,
+    });
+    expect(result.usage.raw).toEqual({
+      prompt_tokens: 10,
+      completion_tokens: 5,
+      total_tokens: 15,
+      prompt_tokens_details: { cached_tokens: 4 },
+      completion_tokens_details: { reasoning_tokens: 2 },
     });
     expect(result.finishReason).toEqual({ unified: 'stop', raw: 'stop' });
   });
@@ -129,13 +137,13 @@ describe('MinimaxChatLanguageModel usage/finishReason migration', () => {
     expect(finish.finishReason).toEqual({ unified: 'stop', raw: 'stop' });
     expect(finish.usage.inputTokens).toEqual({
       total: 10,
-      noCache: undefined,
+      noCache: 6,
       cacheRead: 4,
       cacheWrite: undefined,
     });
     expect(finish.usage.outputTokens).toEqual({
       total: 5,
-      text: undefined,
+      text: 3,
       reasoning: 2,
     });
   });
@@ -371,5 +379,26 @@ describe('convertToMinimaxChatMessages reasoning', () => {
         reasoning_details: details,
       },
     ]);
+  });
+});
+
+describe('createMinimaxOpenAI streaming usage', () => {
+  it('requests stream usage so the API reports token counts', async () => {
+    let sentBody: { stream_options?: unknown } | undefined;
+    const provider = createMinimaxOpenAI({
+      apiKey: 'test-key',
+      fetch: async (_url, init) => {
+        sentBody = JSON.parse(String(init?.body));
+        return sseResponse([{ choices: [{ delta: {}, finish_reason: 'stop' }] }]);
+      },
+    });
+
+    const { stream } = await provider('MiniMax-M3.1-Flash').doStream({
+      prompt: userPrompt,
+      includeRawChunks: false,
+    });
+    await readStream(stream);
+
+    expect(sentBody?.stream_options).toEqual({ include_usage: true });
   });
 });

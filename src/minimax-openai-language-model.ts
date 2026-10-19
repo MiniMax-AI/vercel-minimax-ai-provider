@@ -5,6 +5,7 @@ import {
   LanguageModelV3Content,
   LanguageModelV3FinishReason,
   LanguageModelV3StreamPart,
+  LanguageModelV3Usage,
   SharedV3ProviderMetadata,
   SharedV3Warning,
 } from '@ai-sdk/provider';
@@ -317,23 +318,7 @@ export class MinimaxChatLanguageModel implements LanguageModelV3 {
     return {
       content,
       finishReason: mapOpenAICompatibleFinishReason(choice.finish_reason),
-      usage: {
-        inputTokens: {
-          total: responseBody.usage?.prompt_tokens ?? undefined,
-          noCache: undefined,
-          cacheRead:
-            responseBody.usage?.prompt_tokens_details?.cached_tokens ??
-            undefined,
-          cacheWrite: undefined,
-        },
-        outputTokens: {
-          total: responseBody.usage?.completion_tokens ?? undefined,
-          text: undefined,
-          reasoning:
-            responseBody.usage?.completion_tokens_details?.reasoning_tokens ??
-            undefined,
-        },
-      },
+      usage: convertMinimaxChatUsage(responseBody.usage),
       providerMetadata,
       request: { body },
       response: {
@@ -390,29 +375,8 @@ export class MinimaxChatLanguageModel implements LanguageModelV3 {
       unified: 'other',
       raw: undefined,
     };
-    const usage: {
-      completionTokens: number | undefined;
-      completionTokensDetails: {
-        reasoningTokens: number | undefined;
-        acceptedPredictionTokens: number | undefined;
-        rejectedPredictionTokens: number | undefined;
-      };
-      promptTokens: number | undefined;
-      promptTokensDetails: {
-        cachedTokens: number | undefined;
-      };
-    } = {
-      completionTokens: undefined,
-      completionTokensDetails: {
-        reasoningTokens: undefined,
-        acceptedPredictionTokens: undefined,
-        rejectedPredictionTokens: undefined,
-      },
-      promptTokens: undefined,
-      promptTokensDetails: {
-        cachedTokens: undefined,
-      },
-    };
+    // Last usage reported in the stream (sent only with stream_options.include_usage).
+    let rawUsage: z.infer<typeof openaiCompatibleTokenUsageSchema> = undefined;
     let isFirstChunk = true;
     const providerOptionsName = this.providerOptionsName;
     let isActiveReasoning = false;
@@ -473,35 +437,7 @@ export class MinimaxChatLanguageModel implements LanguageModelV3 {
             }
 
             if (value.usage != null) {
-              const {
-                prompt_tokens,
-                completion_tokens,
-                prompt_tokens_details,
-                completion_tokens_details,
-              } = value.usage;
-
-              usage.promptTokens = prompt_tokens ?? undefined;
-              usage.completionTokens = completion_tokens ?? undefined;
-              if (completion_tokens_details?.reasoning_tokens != null) {
-                usage.completionTokensDetails.reasoningTokens =
-                  completion_tokens_details?.reasoning_tokens;
-              }
-              if (
-                completion_tokens_details?.accepted_prediction_tokens != null
-              ) {
-                usage.completionTokensDetails.acceptedPredictionTokens =
-                  completion_tokens_details?.accepted_prediction_tokens;
-              }
-              if (
-                completion_tokens_details?.rejected_prediction_tokens != null
-              ) {
-                usage.completionTokensDetails.rejectedPredictionTokens =
-                  completion_tokens_details?.rejected_prediction_tokens;
-              }
-              if (prompt_tokens_details?.cached_tokens != null) {
-                usage.promptTokensDetails.cachedTokens =
-                  prompt_tokens_details?.cached_tokens;
-              }
+              rawUsage = value.usage;
             }
 
             const choice = value.choices[0];
@@ -710,36 +646,20 @@ export class MinimaxChatLanguageModel implements LanguageModelV3 {
               [providerOptionsName]: {},
               ...metadataExtractor?.buildMetadata(),
             };
-            if (
-              usage.completionTokensDetails.acceptedPredictionTokens != null
-            ) {
+            const completionTokensDetails = rawUsage?.completion_tokens_details;
+            if (completionTokensDetails?.accepted_prediction_tokens != null) {
               providerMetadata[providerOptionsName].acceptedPredictionTokens =
-                usage.completionTokensDetails.acceptedPredictionTokens;
+                completionTokensDetails.accepted_prediction_tokens;
             }
-            if (
-              usage.completionTokensDetails.rejectedPredictionTokens != null
-            ) {
+            if (completionTokensDetails?.rejected_prediction_tokens != null) {
               providerMetadata[providerOptionsName].rejectedPredictionTokens =
-                usage.completionTokensDetails.rejectedPredictionTokens;
+                completionTokensDetails.rejected_prediction_tokens;
             }
 
             controller.enqueue({
               type: 'finish',
               finishReason,
-              usage: {
-                inputTokens: {
-                  total: usage.promptTokens ?? undefined,
-                  noCache: undefined,
-                  cacheRead: usage.promptTokensDetails.cachedTokens ?? undefined,
-                  cacheWrite: undefined,
-                },
-                outputTokens: {
-                  total: usage.completionTokens ?? undefined,
-                  text: undefined,
-                  reasoning:
-                    usage.completionTokensDetails.reasoningTokens ?? undefined,
-                },
-              },
+              usage: convertMinimaxChatUsage(rawUsage),
               providerMetadata,
             });
           },
@@ -771,6 +691,44 @@ const openaiCompatibleTokenUsageSchema = z
       .nullish(),
   })
   .nullish();
+
+// Maps MiniMax usage to the AI SDK shape. The API reports totals plus the cached
+// and reasoning parts, so the non-cached input and text output are derived.
+function convertMinimaxChatUsage(
+  usage: z.infer<typeof openaiCompatibleTokenUsageSchema>,
+): LanguageModelV3Usage {
+  if (usage == null) {
+    return {
+      inputTokens: {
+        total: undefined,
+        noCache: undefined,
+        cacheRead: undefined,
+        cacheWrite: undefined,
+      },
+      outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+      raw: undefined,
+    };
+  }
+  const promptTokens = usage.prompt_tokens ?? 0;
+  const completionTokens = usage.completion_tokens ?? 0;
+  const cacheReadTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
+  const reasoningTokens =
+    usage.completion_tokens_details?.reasoning_tokens ?? 0;
+  return {
+    inputTokens: {
+      total: promptTokens,
+      noCache: promptTokens - cacheReadTokens,
+      cacheRead: cacheReadTokens,
+      cacheWrite: undefined,
+    },
+    outputTokens: {
+      total: completionTokens,
+      text: completionTokens - reasoningTokens,
+      reasoning: reasoningTokens,
+    },
+    raw: usage,
+  };
+}
 
 // MiniMax specific response schema with reasoning_details
 const MinimaxChatResponseSchema = z.object({
